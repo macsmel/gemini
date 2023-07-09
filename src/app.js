@@ -1,6 +1,6 @@
 "use strict";
-const FilesControllerController = require("./controllers/filesController");
-const filesController = new FilesControllerController();
+const FilesController = require("./controllers/filesController");
+const filesController = new FilesController();
 
 (async () => {
   const length = await filesController.findDuplicates("FOLDER_PATH",
