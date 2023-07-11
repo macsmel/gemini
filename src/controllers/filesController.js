@@ -1,5 +1,5 @@
 const fs = require("fs").promises;
-const { readFileSync} = require("fs");
+const { readFileSync, createReadStream} = require("fs");
 const { unlink } = fs;
 const path = require("path");
 const Confirm = require('prompt-confirm');
@@ -26,9 +26,22 @@ module.exports = class FilesController {
       this.#filenames[filename] = {...stats, path: filePath};
     }
   };
-  #hashComparison = ({filePath, stats}) => {
-    const fileData = readFileSync(filePath);
-    const fileHash = crypto.createHash("md5").update(fileData).digest("hex");
+  #readFile = (filePath) => {
+    return new Promise((res, rej) => {
+      const data = [];
+      const readStream = createReadStream(filePath, "utf-8");
+      readStream.on('error', (error) => rej(error.message));
+      readStream.on('data', (chunk) => data.push(chunk));
+      readStream.on('end', () => res(data));
+    });
+  }
+  #hashComparison = async ({filePath, stats}) => {
+    console.log(filePath, stats.size);
+    // const fileData = readFileSync(filePath);
+    const fileDataArr = await this.#readFile(filePath);
+    const fileDataBuffer = Buffer.from(fileDataArr);
+    const fileHash = crypto.createHash("md5").update(fileDataBuffer).digest("hex");
+    console.log(fileHash);
     const savedFile = this.#fileHashes[fileHash];
     if (savedFile) {
       this.#saveDuplicates(filePath, savedFile);
@@ -51,7 +64,7 @@ module.exports = class FilesController {
         await this.findDuplicates(filePath, deletionDir, hashMode);
       } else {
         const info = { filePath, stats, filename };
-        hashMode ? this.#hashComparison(info) : this.#simpleComparison(info);
+        hashMode ? await this.#hashComparison(info) : this.#simpleComparison(info);
       }
     }
     this.#duplicates = this.#duplicates.filter(path => path.includes(deletionDir));
