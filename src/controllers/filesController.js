@@ -38,7 +38,7 @@ module.exports = class FilesController {
   #readFileAndGetHash = (filePath) => {
     return new Promise((res, rej) => {
       const readStream = createReadStream(filePath, { encoding: "base64" });
-      const hash = crypto.createHash("MD5");
+      const hash = crypto.createHash("sha256");
       readStream.on("error", (error) => rej(error.message));
       readStream.on("data", (chunk) => hash.update(chunk));
       readStream.on("end", () => res(hash.digest("hex")));
@@ -46,8 +46,8 @@ module.exports = class FilesController {
   };
   #hashComparison = async ({filePath, stats}) => {
     console.log(filePath, stats.size);
-    if (stats.size > 6e+9) return this.#skipDuplicate({path: filePath, size: stats.size},
-      "Size limit");
+    // if (stats.size > 6e+9) return this.#skipDuplicate({path: filePath, size: stats.size},
+    //   "Size limit");
     const fileHash = await this.#readFileAndGetHash(filePath);
     console.log(fileHash);
     const savedFile = this.#fileHashes[fileHash];
