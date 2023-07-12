@@ -1,50 +1,58 @@
 const fs = require("fs").promises;
-const { readFileSync, createReadStream} = require("fs");
+const { createReadStream } = require("fs");
 const { unlink } = fs;
 const path = require("path");
-const Confirm = require('prompt-confirm');
+const Confirm = require("prompt-confirm");
 const crypto = require("crypto");
 
 module.exports = class FilesController {
   #duplicates = [];
-  #filenames = {};
+  #fileNames = {};
   #fileHashes = {};
   #skipped = [];
   #deletionDir = "";
   #saveDuplicates = (filePath, savedFile) => {
-    this.#duplicates.push(filePath.includes(this.#deletionDir) ? filePath : savedFile.path);
+    const includeDeletionDir = filePath.includes(this.#deletionDir);
+    this.#duplicates.push({
+      deletionPath: includeDeletionDir ? filePath : savedFile.path,
+      originPath: !includeDeletionDir ? filePath : savedFile.path,
+    });
   };
-  #simpleComparison = ({stats, filePath, filename}) => {
-    const savedFile = this.#filenames[filename];
+  #skipDuplicate = (info, reason) => {
+    this.#skipped.push({...info, reason});
+  };
+  #simpleComparison = ({stats, filePath, fileName}) => {
+    const savedFile = this.#fileNames[fileName];
     if (savedFile) {
       if (savedFile.size === stats.size) {
         this.#saveDuplicates(filePath, savedFile);
       } else {
+        this.#skipDuplicate({a: { path: filePath, size: stats.size }, b: { path: savedFile.path,
+          size: stats.size }}, "Different Size");
         this.#skipped.push({a: filePath, b: savedFile.path, sizes: [savedFile.size, stats.size]});
       }
     } else {
-      this.#filenames[filename] = {...stats, path: filePath};
+      this.#fileNames[fileName] = {...stats, path: filePath};
     }
   };
-  #readFile = (filePath) => {
+  #readFileAndGetHash = (filePath) => {
     return new Promise((res, rej) => {
-      const data = [];
-      const readStream = createReadStream(filePath, "utf-8");
-      readStream.on('error', (error) => rej(error.message));
-      readStream.on('data', (chunk) => data.push(chunk));
-      readStream.on('end', () => res(data));
+      const readStream = createReadStream(filePath, { encoding: "base64" });
+      const hash = crypto.createHash("MD5");
+      readStream.on("error", (error) => rej(error.message));
+      readStream.on("data", (chunk) => hash.update(chunk));
+      readStream.on("end", () => res(hash.digest("hex")));
     });
-  }
+  };
   #hashComparison = async ({filePath, stats}) => {
     console.log(filePath, stats.size);
-    // const fileData = readFileSync(filePath);
-    const fileDataArr = await this.#readFile(filePath);
-    const fileDataBuffer = Buffer.from(fileDataArr);
-    const fileHash = crypto.createHash("md5").update(fileDataBuffer).digest("hex");
+    if (stats.size > 6e+9) return this.#skipDuplicate({path: filePath, size: stats.size},
+      "Size limit");
+    const fileHash = await this.#readFileAndGetHash(filePath);
     console.log(fileHash);
     const savedFile = this.#fileHashes[fileHash];
     if (savedFile) {
-      this.#saveDuplicates(filePath, savedFile);
+      this.#saveDuplicates(filePath, savedFile, fileHash);
     } else {
       this.#fileHashes[fileHash] = {...stats, path: filePath};
     }
@@ -58,16 +66,16 @@ module.exports = class FilesController {
     for (const file of files) {
       if (file.startsWith(".")) continue;
       const filePath = path.join(dir, file);
-      const filename = path.parse(file).base;
+      const fileName = path.parse(file).base;
       const stats = await fs.stat(filePath);
       if (stats.isDirectory()) {
         await this.findDuplicates(filePath, deletionDir, hashMode);
       } else {
-        const info = { filePath, stats, filename };
+        const info = { filePath, stats, fileName };
         hashMode ? await this.#hashComparison(info) : this.#simpleComparison(info);
       }
     }
-    this.#duplicates = this.#duplicates.filter(path => path.includes(deletionDir));
+    this.#duplicates = this.#duplicates.filter(duplicate => duplicate.deletionPath.includes(deletionDir));
     return this.#duplicates.length;
   };
   deleteDuplicates = async () => {
@@ -75,7 +83,7 @@ module.exports = class FilesController {
       .ask(async (answer) => {
         try {
           if (answer) {
-            await Promise.all(this.#duplicates.map(path => unlink(path)));
+            await Promise.all(this.#duplicates.map(duplicate => unlink(duplicate.deletionPath)));
             console.log("Done.");
           } else {
             await this.#outputList("duplicates.json", this.#duplicates);
@@ -87,4 +95,4 @@ module.exports = class FilesController {
         }
       });
   };
-}
+};

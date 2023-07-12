@@ -1,13 +1,13 @@
 "use strict";
 const FilesController = require("./controllers/filesController");
 const filesController = new FilesController();
-const Confirm = require('prompt-confirm');
+const Confirm = require("prompt-confirm");
 
 (async () => {
   new Confirm("Use Hash Mode?")
     .ask(async (answer) => {
-      const length = await filesController.findDuplicates("FOLDER_PATH",
-        "SUB_FOLDER_DELETION_PATH_OR_REPEAT_FOLDER_PATH", answer);
+      const length = await filesController.findDuplicates("SEARCH_FOLDER",
+        "DELETION_FOLDER_OR_SEARCH_FOLDER", answer);
       console.log(`Found: ${length} duplicates.`);
       length > 0 && await filesController.deleteDuplicates();
     });
