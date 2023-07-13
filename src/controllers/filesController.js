@@ -81,17 +81,21 @@ module.exports = class FilesController {
   deleteDuplicates = async () => {
     new Confirm("Do you want to delete all duplicates?")
       .ask(async (answer) => {
-        try {
-          if (answer) {
-            await Promise.all(this.#duplicates.map(duplicate => unlink(duplicate.deletionPath)));
-            console.log("Done.");
-          } else {
-            await this.#outputList("duplicates.json", this.#duplicates);
-            await this.#outputList("skipped.json", this.#skipped);
-            console.log("File duplicates.json and skipped.json were created.");
+        if (answer) {
+          for (const duplicate of this.#duplicates) {
+            try {
+              await fs.access(duplicate.deletionPath);
+              await unlink(duplicate.deletionPath);
+              // console.log(`Deleted file: ${duplicate.deletionPath}`);
+            } catch (err) {
+              console.log(`File not found: ${duplicate.deletionPath}`);
+            }
           }
-        } catch (err) {
-          console.log(err);
+          console.log("Done.");
+        } else {
+          await this.#outputList("duplicates.json", this.#duplicates);
+          await this.#outputList("skipped.json", this.#skipped);
+          console.log("File duplicates.json and skipped.json were created.");
         }
       });
   };
