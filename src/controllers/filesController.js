@@ -1,3 +1,4 @@
+"use strict";
 const fs = require("fs").promises;
 const { createReadStream } = require("fs");
 const { unlink } = fs;
